@@ -7,7 +7,7 @@ const fileSlabSize = 4096
 // FileSlab is a bump-pointer allocator for File objects.
 // It reduces GC roots from O(N files) to O(N/4096 slabs) by backing
 // many File values in a single slice allocation rather than individual heap objects.
-// One FileSlab is owned by a ParallelAnalyzer for the lifetime of a single scan;
+// One FileSlab is owned by a ParallelAnalyzer; reused across rescans.
 // Free() is called after wait.Wait() to release all backing memory at once.
 type FileSlab struct {
 	mu    sync.Mutex
@@ -32,11 +32,12 @@ func (s *FileSlab) Alloc() *File {
 	return p
 }
 
-// Free releases all backing slab arrays.
-// Must only be called after all goroutines that may call Alloc have exited
-// (i.e., after wait.Wait() in AnalyzeDirWithContext).
+// Free releases all backing arrays. Must only be called after all goroutines
+// that may call Alloc have exited (i.e., after wait.Wait()).
 func (s *FileSlab) Free() {
-	s.mu.Lock()
+	if !s.mu.TryLock() {
+		panic("FileSlab.Free called while Alloc is in progress")
+	}
 	defer s.mu.Unlock()
 	s.slabs = nil
 	s.cur = nil
