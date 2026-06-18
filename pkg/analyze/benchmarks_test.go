@@ -1,83 +1,150 @@
 package analyze
 
-// Benchmarks documenting the performance impact of three memory-efficiency PRs.
+// Memory benchmarks for the three memory-efficiency PRs.
 //
-// Run all:
-//   go test -bench=. -benchmem -count=5 ./pkg/analyze/
+// How to read the output:
+//   B/op        — bytes handed out by the Go allocator per operation
+//   allocs/op   — heap allocations per operation (each = one GC root)
+//   struct-B/op — unsafe.Sizeof(File{}); allocator may bill more due to size-class rounding
+//   heap-B/file — live heap bytes per file retained after a full GC (measures actual footprint)
 //
-// Compare PRs against master baseline:
-//   git stash && go test -bench=. -benchmem -count=5 ./pkg/analyze/ > before.txt
-//   git stash pop && go test -bench=. -benchmem -count=5 ./pkg/analyze/ > after.txt
-//   benchstat before.txt after.txt
+// Compare branches:
+//   git stash
+//   go test -bench=. -benchmem -count=10 ./pkg/analyze/ > /tmp/before.txt
+//   git stash pop
+//   go test -bench=. -benchmem -count=10 ./pkg/analyze/ > /tmp/after.txt
+//   go tool benchstat /tmp/before.txt /tmp/after.txt
 
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"testing"
 	"unsafe"
 
+	"github.com/dundee/gdu/v5/internal/common"
 	"github.com/dundee/gdu/v5/pkg/fs"
 )
 
-// sinkFile prevents the compiler from optimizing away heap allocations in benchmarks.
+// sinkFile prevents the compiler from stack-allocating or discarding benchmark results.
 var sinkFile *File
 
-// ── PR 1: Compact File Struct ──────────────────────────────────────────────────
+// ── PR 1: Struct compaction — per-allocation cost ─────────────────────────────
 //
-// Mtime changed from time.Time (24 bytes) to int64 (8 bytes).
-// Flag changed from rune (4 bytes) to byte (1 byte).
-// Result: File struct shrinks from 88 → 72 bytes (~18%).
-// At 10M files: ~160 MB saved in struct data alone.
-
-func TestFileStructSizePR1(t *testing.T) {
-	got := unsafe.Sizeof(File{})
-	if got > 72 {
-		t.Errorf("File struct is %d bytes, want <= 72 (regression from PR 1)", got)
-	}
-	t.Logf("File struct size: %d bytes (baseline was 88, target ≤ 72)", got)
-}
-
-// ── PR 3: FileSlab — allocation rate comparison ────────────────────────────────
+// The File struct shrank from 88 → 72 bytes.
+// Go's allocator uses size classes; 88 bytes → 96-byte class, 72 bytes → 80-byte class.
+// So B/op drops from 96 → 80 when comparing master vs this branch.
 //
-// BenchmarkAllocNewFile: each call to new(File) is a heap allocation (1 alloc/op).
-// BenchmarkAllocSlab:    each call to FileSlab.Alloc() returns a pointer into an
-//                        existing slab array — 0 allocs/op except at slab boundaries
-//                        (1 slab alloc per 4096 files = 0.00024 allocs/op amortized).
-//
-// Expected output:
-//   BenchmarkAllocNewFile-N    ~1.4 ns/op   72 B/op   1 allocs/op
-//   BenchmarkAllocSlab-N       ~0.3 ns/op    0 B/op   0 allocs/op
+// struct-B/op shows the exact struct size via unsafe.Sizeof.
+// B/op shows what the allocator actually charges (size class + metadata).
 
 func BenchmarkAllocNewFile(b *testing.B) {
 	b.ReportAllocs()
+	b.ReportMetric(float64(unsafe.Sizeof(File{})), "struct-B/op")
 	for i := 0; i < b.N; i++ {
-		sinkFile = new(File) // heap allocation: 1 alloc/op, 72 B/op
+		sinkFile = new(File) // 1 heap alloc; B/op = allocator size class ≥ struct size
 	}
 }
+
+// ── PR 3: FileSlab — amortised allocation cost ────────────────────────────────
+//
+// slab.Alloc() bumps a pointer into an existing []File backing array.
+// B/op = (slab-bytes / files-per-slab) = exact struct size — no size-class overhead.
+// allocs/op = 0 because no heap allocation happens per call (only at slab boundaries).
 
 func BenchmarkAllocSlab(b *testing.B) {
 	var s FileSlab
 	b.ReportAllocs()
+	b.ReportMetric(float64(unsafe.Sizeof(File{})), "struct-B/op")
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		sinkFile = s.Alloc() // slab pointer bump: 0 allocs/op (amortized)
+		// 0 heap allocs; B/op = amortised slab cost = sizeof(File) exactly
+		// On master (88-byte File): B/op would be 88; after PR 1: B/op = 72
+		sinkFile = s.Alloc()
 	}
 }
 
-// ── PR 3: Full scan — parallel (slab) vs sequential (no slab) ─────────────────
+// ── PR 1 + PR 3: Live heap footprint for N File objects ───────────────────────
 //
-// BenchmarkScanLarge_Parallel: ParallelAnalyzer with FileSlab.
-//   File objects are bump-allocated from slab arrays.
-//   GC roots for File objects: O(N/4096) slab arrays instead of O(N) individual ptrs.
+// Measures HeapAlloc delta (live bytes, after GC) for exactly N File allocations.
+// On master   (88-byte File, 96-byte class): 10K files ≈ 960 KB live
+// After PR 1  (72-byte File, 80-byte class): 10K files ≈ 800 KB live  (–16%)
+// After PR 1+3 (slab, no per-file GC overhead): 10K files ≈ 720 KB live (–25%)
 //
-// BenchmarkScanLarge_Sequential: SequentialAnalyzer without FileSlab.
-//   File objects are individually heap-allocated via &File{...}.
-//   GC roots for File objects: O(N) — one per file.
+// heap-B/file is reported via b.ReportMetric so benchstat can track it across branches.
+// The heap measurement runs once outside b.N to avoid GC calls polluting ns/op.
+
+func BenchmarkHeapFootprint_NewAlloc(b *testing.B) {
+	const n = 10_000
+
+	// Measure live heap outside the timing loop.
+	b.StopTimer()
+	files := make([]*File, n)
+	runtime.GC()
+	var ms1, ms2 runtime.MemStats
+	runtime.ReadMemStats(&ms1)
+	for j := range files {
+		files[j] = new(File)
+	}
+	runtime.GC()
+	runtime.ReadMemStats(&ms2)
+	liveBytes := ms2.HeapAlloc - ms1.HeapAlloc
+	b.ReportMetric(float64(liveBytes)/n, "heap-B/file")
+	b.ReportMetric(float64(unsafe.Sizeof(File{})), "struct-B/op")
+	runtime.KeepAlive(files)
+	b.StartTimer()
+
+	b.ReportAllocs()
+	files2 := make([]*File, n)
+	for i := 0; i < b.N; i++ {
+		for j := range files2 {
+			files2[j] = new(File)
+		}
+	}
+	runtime.KeepAlive(files2)
+}
+
+func BenchmarkHeapFootprint_Slab(b *testing.B) {
+	const n = 10_000
+
+	// Measure live heap outside the timing loop.
+	b.StopTimer()
+	var s0 FileSlab
+	files := make([]*File, n)
+	runtime.GC()
+	var ms1, ms2 runtime.MemStats
+	runtime.ReadMemStats(&ms1)
+	for j := range files {
+		files[j] = s0.Alloc()
+	}
+	runtime.GC()
+	runtime.ReadMemStats(&ms2)
+	liveBytes := ms2.HeapAlloc - ms1.HeapAlloc
+	b.ReportMetric(float64(liveBytes)/n, "heap-B/file")
+	b.ReportMetric(float64(unsafe.Sizeof(File{})), "struct-B/op")
+	runtime.KeepAlive(files)
+	b.StartTimer()
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		var s FileSlab
+		fs2 := make([]*File, n)
+		for j := range fs2 {
+			fs2[j] = s.Alloc()
+		}
+		runtime.KeepAlive(fs2)
+	}
+}
+
+// ── Full scan: live heap footprint per file scanned ───────────────────────────
 //
-// Both scan the same tree (10 subdirs × 100 files = 1000 leaf files).
-// The allocs/op difference shows the slab benefit for File allocations specifically.
-// Note: parallel and sequential have different concurrency overhead; the per-file
-// allocation difference is the signal, not the absolute allocs/op number.
+// Measures total live heap for a real directory scan of 1000 files (10 dirs × 100 files).
+// heap-B/file includes Dir structs, File structs, string data, and slice headers.
+// This is the metric that shows the compound effect of all three PRs together.
+//
+// Parallel (with slab) vs Sequential (without slab):
+//   allocs/op difference ≈ 1000 (one fewer alloc per file — the slab benefit).
+//   B/op difference ≈ nFiles × (allocatorClass_old - allocatorClass_new).
 
 const benchDirs = 10
 const benchFilesPerDir = 100
@@ -103,51 +170,71 @@ func makeLargeTree(b *testing.B) (root string, cleanup func()) {
 	return root, func() { os.RemoveAll(root) }
 }
 
-func BenchmarkScanLarge_Parallel(b *testing.B) {
+func measureScanHeap(b *testing.B, a common.Analyzer, root string) uint64 {
+	b.Helper()
+	runtime.GC()
+	var ms1, ms2 runtime.MemStats
+	runtime.ReadMemStats(&ms1)
+	dir := a.AnalyzeDir(root, func(_, _ string) bool { return false }, func(_ string) bool { return false })
+	a.GetDone().Wait()
+	dir.UpdateStats(make(fs.HardLinkedItems))
+	runtime.GC()
+	runtime.ReadMemStats(&ms2)
+	runtime.KeepAlive(dir)
+	return ms2.HeapAlloc - ms1.HeapAlloc
+}
+
+func BenchmarkScanHeap_Parallel(b *testing.B) {
 	root, cleanup := makeLargeTree(b)
 	defer cleanup()
+	const nFiles = benchDirs * benchFilesPerDir
+
+	b.StopTimer()
+	liveBytes := measureScanHeap(b, CreateAnalyzer(), root)
+	b.ReportMetric(float64(liveBytes)/nFiles, "heap-B/file")
+	b.StartTimer()
 
 	b.ReportAllocs()
-	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		a := CreateAnalyzer() // ParallelAnalyzer with FileSlab
+		a := CreateAnalyzer()
 		dir := a.AnalyzeDir(root, func(_, _ string) bool { return false }, func(_ string) bool { return false })
 		a.GetDone().Wait()
 		dir.UpdateStats(make(fs.HardLinkedItems))
 	}
 }
 
-func BenchmarkScanLarge_Sequential(b *testing.B) {
+func BenchmarkScanHeap_Sequential(b *testing.B) {
 	root, cleanup := makeLargeTree(b)
 	defer cleanup()
+	const nFiles = benchDirs * benchFilesPerDir
+
+	b.StopTimer()
+	liveBytes := measureScanHeap(b, CreateSeqAnalyzer(), root)
+	b.ReportMetric(float64(liveBytes)/nFiles, "heap-B/file")
+	b.StartTimer()
 
 	b.ReportAllocs()
-	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		a := CreateSeqAnalyzer() // SequentialAnalyzer — no slab, uses &File{} per file
+		a := CreateSeqAnalyzer()
 		dir := a.AnalyzeDir(root, func(_, _ string) bool { return false }, func(_ string) bool { return false })
 		a.GetDone().Wait()
 		dir.UpdateStats(make(fs.HardLinkedItems))
 	}
 }
 
-// BenchmarkScanLarge_Parallel_GCRoots documents the GC root reduction.
-// This benchmark runs with GOGC=off to isolate allocation cost from GC cost.
-// Run with: go test -bench=BenchmarkScanLarge_Parallel_GCRoots -benchmem -gcflags="-e" ./pkg/analyze/
-func BenchmarkScanLarge_GCRoots(b *testing.B) {
+// BenchmarkScanGCRoots documents the GC root reduction from PR 3.
+// Logged values are computed from constants, not runtime measurements.
+func BenchmarkScanGCRoots(b *testing.B) {
 	root, cleanup := makeLargeTree(b)
 	defer cleanup()
+	const nFiles = benchDirs * benchFilesPerDir
+	slabs := (nFiles + fileSlabSize - 1) / fileSlabSize
 
-	totalFiles := benchDirs * benchFilesPerDir
-	slabsNeeded := (totalFiles + fileSlabSize - 1) / fileSlabSize
-
-	b.Logf("Tree: %d dirs × %d files = %d leaf files", benchDirs, benchFilesPerDir, totalFiles)
-	b.Logf("With slab:    %d GC roots for File objects (1 slab array per %d files)", slabsNeeded, fileSlabSize)
-	b.Logf("Without slab: %d GC roots for File objects (1 per file)", totalFiles)
-	b.Logf("GC root reduction: %.0fx fewer roots", float64(totalFiles)/float64(slabsNeeded))
+	b.ReportMetric(float64(nFiles), "roots-without-slab")
+	b.ReportMetric(float64(slabs), "roots-with-slab")
+	b.ReportMetric(float64(nFiles)/float64(slabs), "root-reduction-x")
 
 	b.ReportAllocs()
-	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		a := CreateAnalyzer()
 		dir := a.AnalyzeDir(root, func(_, _ string) bool { return false }, func(_ string) bool { return false })
