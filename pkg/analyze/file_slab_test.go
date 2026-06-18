@@ -1,6 +1,7 @@
 package analyze
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 
@@ -42,30 +43,41 @@ func TestFileSlabConcurrent(t *testing.T) {
 	const goroutines = 16
 	const allocsPerGoroutine = 1000
 
-	var mu sync.Mutex
-	seen := make(map[*File]struct{}, goroutines*allocsPerGoroutine)
+	type result struct {
+		ptr      *File
+		expected string
+	}
+	allResults := make([][]result, goroutines)
 
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
 	for i := 0; i < goroutines; i++ {
+		i := i
 		go func() {
 			defer wg.Done()
-			local := make([]*File, allocsPerGoroutine)
+			local := make([]result, allocsPerGoroutine)
 			for j := 0; j < allocsPerGoroutine; j++ {
-				local[j] = s.Alloc()
+				p := s.Alloc()
+				sentinel := fmt.Sprintf("g%d-j%d", i, j)
+				p.Name = sentinel
+				local[j] = result{ptr: p, expected: sentinel}
 			}
-			mu.Lock()
-			for _, p := range local {
-				seen[p] = struct{}{}
-			}
-			mu.Unlock()
+			allResults[i] = local
 		}()
 	}
 	wg.Wait()
 
-	assert.Equal(t, goroutines*allocsPerGoroutine, len(seen),
-		"expected %d distinct pointers from concurrent allocs, got %d",
-		goroutines*allocsPerGoroutine, len(seen))
+	// Verify pointer uniqueness and data integrity
+	seen := make(map[*File]struct{}, goroutines*allocsPerGoroutine)
+	for _, gResults := range allResults {
+		for _, r := range gResults {
+			_, dup := seen[r.ptr]
+			assert.False(t, dup, "duplicate pointer")
+			seen[r.ptr] = struct{}{}
+			assert.Equal(t, r.expected, r.ptr.Name, "data corrupted: sentinel overwritten")
+		}
+	}
+	assert.Equal(t, goroutines*allocsPerGoroutine, len(seen))
 }
 
 func TestFileSlabZeroInit(t *testing.T) {
@@ -86,7 +98,7 @@ func TestFileSlabSlabBoundary(t *testing.T) {
 	for i := 0; i < fileSlabSize; i++ {
 		s.Alloc()
 	}
-	assert.Equal(t, 1, len(s.slabs), "expected 1 slab after allocating fileSlabSize files")
+	assert.Equal(t, 1, len(s.slabs), "slab is full but still count 1 — new slab allocated on next Alloc()")
 
 	// One more should trigger a new slab
 	s.Alloc()

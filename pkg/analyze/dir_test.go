@@ -386,7 +386,6 @@ func BenchmarkAnalyzeDirSlab(b *testing.B) {
 			func(_, _ string) bool { return false },
 			func(_ string) bool { return false },
 		)
-		analyzer.GetDone().Wait()
 		dir.UpdateStats(make(fs.HardLinkedItems))
 	}
 }
