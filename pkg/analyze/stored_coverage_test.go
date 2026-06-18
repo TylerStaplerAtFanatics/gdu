@@ -99,7 +99,7 @@ func TestStoredDirUpdateStatsWithMtimeUpdate(t *testing.T) {
 	// Create a file with newer mtime
 	file := &File{
 		Name:  "newfile",
-		Mtime: time.Now().Add(time.Hour),
+		Mtime: time.Now().Add(time.Hour).Unix(),
 	}
 	dir.AddFile(file)
 
@@ -150,7 +150,7 @@ func TestStoredDirUpdateStatsWithDotFlag(t *testing.T) {
 	dir.AddFile(file)
 
 	dir.UpdateStats(make(fs.HardLinkedItems))
-	assert.Equal(t, '.', dir.Flag)
+	assert.Equal(t, byte('.'), dir.Flag)
 }
 
 func TestStoredAnalyzerWithZip(t *testing.T) {

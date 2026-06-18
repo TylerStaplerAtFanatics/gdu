@@ -85,6 +85,7 @@ type Flags struct {
 	NoSpawnShell       bool     `yaml:"no-spawn-shell"`
 	FollowSymlinks     bool     `yaml:"follow-symlinks"`
 	Profiling          bool     `yaml:"profiling"`
+	ProfilingPort      int      `yaml:"profiling-port"`
 	ReadFromStorage    bool     `yaml:"read-from-storage"`
 	DbPath             string   `yaml:"db"`
 	Summarize          bool     `yaml:"summarize"`
@@ -582,13 +583,19 @@ func (a *App) setNoCross(path string) error {
 
 func (a *App) runAction(ui UI, path string) error {
 	if a.Flags.Profiling {
+		port := a.Flags.ProfilingPort
+		if port == 0 {
+			port = 6060
+		}
 		go func() {
+			addr := fmt.Sprintf("localhost:%d", port)
 			http.HandleFunc("/debug/pprof/", pprof.Index)
 			http.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
 			http.HandleFunc("/debug/pprof/profile", pprof.Profile)
 			http.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 			http.HandleFunc("/debug/pprof/trace", pprof.Trace)
-			log.Println(http.ListenAndServe("localhost:6060", nil))
+			log.Printf("Starting profiling server on http://%s/debug/pprof/", addr)
+			log.Println(http.ListenAndServe(addr, nil))
 		}()
 	}
 

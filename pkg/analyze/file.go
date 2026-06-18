@@ -7,20 +7,24 @@ import (
 	"sort"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/dundee/gdu/v5/pkg/fs"
 )
 
 // File struct
 type File struct {
-	Mtime  time.Time
 	Parent fs.Item
 	Name   string
 	Size   int64
 	Usage  int64
 	Mli    uint64
-	Flag   rune
+	Mtime  int64 // unix seconds
+	Flag   byte
 }
+
+// compile-time size assertion: File must not exceed 72 bytes
+var _ [72 - unsafe.Sizeof(File{})]struct{}
 
 // GetName returns name of dir
 func (f *File) GetName() string {
@@ -49,7 +53,7 @@ func (f *File) GetPath() string {
 
 // GetFlag returns flag of the file
 func (f *File) GetFlag() rune {
-	return f.Flag
+	return rune(f.Flag)
 }
 
 // GetSize returns size of the file
@@ -64,7 +68,7 @@ func (f *File) GetUsage() int64 {
 
 // GetMtime returns mtime of the file
 func (f *File) GetMtime() time.Time {
-	return f.Mtime
+	return time.Unix(f.Mtime, 0)
 }
 
 // GetType returns name type of item
@@ -255,8 +259,8 @@ func (f *Dir) updateStats(linkedItems fs.HardLinkedItems, filteringFiles bool) {
 		totalUsage += usage
 		itemCount += count
 
-		if entry.GetMtime().After(f.Mtime) {
-			f.Mtime = entry.GetMtime()
+		if entry.GetMtime().Unix() > f.Mtime {
+			f.Mtime = entry.GetMtime().Unix()
 		}
 
 		if !entry.IsDir() {

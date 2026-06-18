@@ -23,7 +23,7 @@ func TestTopDirAddUsage(t *testing.T) {
 func TestTopDirSetFlag(t *testing.T) {
 	td := &TopDir{Name: "test", Flag: ' '}
 	td.SetFlag('!')
-	assert.Equal(t, '!', td.Flag)
+	assert.Equal(t, byte('!'), td.Flag)
 }
 
 func TestSimpleDirGetName(t *testing.T) {
@@ -80,7 +80,7 @@ func TestSimpleDirUpdateStatsErrorFlag(t *testing.T) {
 	}
 
 	d.UpdateStats(make(fs.HardLinkedItems))
-	assert.Equal(t, '.', d.Flag)
+	assert.Equal(t, byte('.'), d.Flag)
 }
 
 func TestSimpleDirUpdateStatsErrorFlagPreserved(t *testing.T) {
@@ -93,7 +93,7 @@ func TestSimpleDirUpdateStatsErrorFlagPreserved(t *testing.T) {
 
 	d.UpdateStats(make(fs.HardLinkedItems))
 	// '!' flag on dir should be preserved (not downgraded to '.')
-	assert.Equal(t, '!', d.Flag)
+	assert.Equal(t, byte('!'), d.Flag)
 }
 
 func TestSimpleDirUpdateStatsDotFlag(t *testing.T) {
@@ -105,7 +105,7 @@ func TestSimpleDirUpdateStatsDotFlag(t *testing.T) {
 	}
 
 	d.UpdateStats(make(fs.HardLinkedItems))
-	assert.Equal(t, '.', d.Flag)
+	assert.Equal(t, byte('.'), d.Flag)
 }
 
 func TestSimpleDirGetFilesSort(t *testing.T) {

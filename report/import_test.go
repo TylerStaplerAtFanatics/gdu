@@ -39,7 +39,7 @@ func TestReadAnalysis(t *testing.T) {
 	alt2 := dir.Files[2].(*analyze.Dir).Files[2].(*analyze.File)
 	assert.Equal(t, "app_linux_test2.go", alt2.Name)
 	assert.Equal(t, uint64(1234), alt2.Mli)
-	assert.Equal(t, 'H', alt2.Flag)
+	assert.Equal(t, byte('H'), alt2.Flag)
 }
 
 func TestReadAnalysisWithEmptyInput(t *testing.T) {

@@ -86,7 +86,7 @@ func processZipFile(zipPath string, info os.FileInfo) (zipDir *ZipDir, err error
 				Flag:  'Z', // Use 'Z' to identify zip files
 				Size:  info.Size(),
 				Usage: info.Size(),
-				Mtime: info.ModTime(),
+				Mtime: info.ModTime().Unix(),
 			},
 			ItemCount: 1,
 			Files:     make(fs.Files, 0),
@@ -118,7 +118,7 @@ func processZipFile(zipPath string, info os.FileInfo) (zipDir *ZipDir, err error
 				Flag:   ' ',
 				Size:   int64(f.UncompressedSize64),
 				Usage:  int64(f.CompressedSize64),
-				Mtime:  f.FileInfo().ModTime(),
+				Mtime:  f.FileInfo().ModTime().Unix(),
 				Parent: parentDir,
 			},
 			zipPath:   zipPath,
@@ -163,7 +163,7 @@ func ensureZipDirExists(dirMap map[string]*ZipDir, path, zipPath string, rootDir
 				Flag:   'Z',
 				Size:   4096, // virtual directory size
 				Usage:  4096,
-				Mtime:  time.Now(),
+				Mtime:  time.Now().Unix(),
 				Parent: parent,
 			},
 			ItemCount: 1,

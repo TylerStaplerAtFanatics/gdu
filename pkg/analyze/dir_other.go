@@ -5,7 +5,6 @@ package analyze
 import (
 	"os"
 	"syscall"
-	"time"
 )
 
 func getPlatformSpecificUsageAndMli(info os.FileInfo) (usage int64, ino uint64) {
@@ -14,7 +13,10 @@ func getPlatformSpecificUsageAndMli(info os.FileInfo) (usage int64, ino uint64) 
 
 func setPlatformSpecificAttrs(file *File, f os.FileInfo) {
 	stat := f.Sys().(*syscall.Win32FileAttributeData)
-	file.Mtime = time.Unix(0, stat.LastWriteTime.Nanoseconds())
+	// Nanoseconds() returns ns since the Unix epoch (the stdlib subtracts
+	// the Windows-to-Unix epoch offset internally), so dividing by 1e9
+	// gives correct Unix seconds.
+	file.Mtime = stat.LastWriteTime.Nanoseconds() / 1e9
 	file.Usage = f.Size() // No block info on Windows, use apparent size
 }
 
@@ -23,7 +25,7 @@ func setDirPlatformSpecificAttrs(dir *Dir, path string) {
 	if err != nil {
 		return
 	}
-	dir.Mtime = stat.ModTime()
+	dir.Mtime = stat.ModTime().Unix()
 }
 
 // getSyscallStats extracts usage and inode info from os.FileInfo using syscall
