@@ -55,8 +55,8 @@ func BenchmarkAllocNewFile(b *testing.B) {
 func BenchmarkAllocSlab(b *testing.B) {
 	var s FileSlab
 	b.ReportAllocs()
-	b.ReportMetric(float64(unsafe.Sizeof(File{})), "struct-B/op")
 	b.ResetTimer()
+	b.ReportMetric(float64(unsafe.Sizeof(File{})), "struct-B/op")
 	for i := 0; i < b.N; i++ {
 		// 0 heap allocs; B/op = amortised slab cost = sizeof(File) exactly
 		// On master (88-byte File): B/op would be 88; after PR 1: B/op = 72
