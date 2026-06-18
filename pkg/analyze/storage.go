@@ -15,6 +15,7 @@ import (
 func init() {
 	gob.RegisterName("analyze.StoredDir", &StoredDir{})
 	gob.RegisterName("analyze.Dir", &Dir{})
+	// NOTE: File.Mtime changed from time.Time to int64 in PR1; existing BadgerDB databases are not forward-compatible.
 	gob.RegisterName("analyze.File", &File{})
 	gob.RegisterName("analyze.ParentDir", &ParentDir{})
 }

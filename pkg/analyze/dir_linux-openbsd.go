@@ -5,7 +5,6 @@ package analyze
 import (
 	"os"
 	"syscall"
-	"time"
 )
 
 const devBSize = 512
@@ -24,7 +23,7 @@ func getPlatformSpecificUsageAndMli(info os.FileInfo) (usage int64, ino uint64) 
 func setPlatformSpecificAttrs(file *File, f os.FileInfo) {
 	if stat, ok := f.Sys().(*syscall.Stat_t); ok {
 		file.Usage = stat.Blocks * devBSize
-		file.Mtime = time.Unix(int64(stat.Mtim.Sec), int64(stat.Mtim.Nsec))
+		file.Mtime = stat.Mtim.Sec
 
 		if stat.Nlink > 1 {
 			file.Mli = stat.Ino
@@ -38,7 +37,7 @@ func setDirPlatformSpecificAttrs(dir *Dir, path string) {
 		return
 	}
 
-	dir.Mtime = time.Unix(int64(stat.Mtim.Sec), int64(stat.Mtim.Nsec))
+	dir.Mtime = stat.Mtim.Sec
 }
 
 // getSyscallStats extracts usage and inode info from os.FileInfo using syscall
