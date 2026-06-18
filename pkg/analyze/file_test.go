@@ -289,6 +289,20 @@ func TestFileStructSize(t *testing.T) {
 	assert.LessOrEqual(t, int(unsafe.Sizeof(File{})), 72)
 }
 
+func TestGetMtimeZeroSemantics(t *testing.T) {
+	f := &File{Mtime: 0}
+	got := f.GetMtime()
+	assert.Equal(t, int64(0), got.Unix())
+	// Unix epoch is NOT the Go zero time — callers must use Mtime==0, not IsZero()
+	assert.False(t, got.IsZero(), "Unix epoch is not the Go zero time")
+}
+
+func TestGetMtimeNegative(t *testing.T) {
+	preEpoch := int64(-1234567890) // approx 1930
+	f := &File{Mtime: preEpoch}
+	assert.Equal(t, preEpoch, f.GetMtime().Unix())
+}
+
 func TestGetMtimeRoundtrip(t *testing.T) {
 	someUnixSecs := int64(1629329400) // 2021-08-19 00:30:00 UTC
 	f := &File{Mtime: someUnixSecs}

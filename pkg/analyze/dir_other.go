@@ -13,6 +13,9 @@ func getPlatformSpecificUsageAndMli(info os.FileInfo) (usage int64, ino uint64) 
 
 func setPlatformSpecificAttrs(file *File, f os.FileInfo) {
 	stat := f.Sys().(*syscall.Win32FileAttributeData)
+	// Nanoseconds() returns ns since the Unix epoch (the stdlib subtracts
+	// the Windows-to-Unix epoch offset internally), so dividing by 1e9
+	// gives correct Unix seconds.
 	file.Mtime = stat.LastWriteTime.Nanoseconds() / 1e9
 	file.Usage = f.Size() // No block info on Windows, use apparent size
 }

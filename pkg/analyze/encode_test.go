@@ -66,3 +66,36 @@ func TestEncode(t *testing.T) {
 	assert.Contains(t, buff.String(), `"ino":1234`)
 	assert.Contains(t, buff.String(), `"hlnkc":true`)
 }
+
+func TestEncodeNoMtimeWhenZero(t *testing.T) {
+	dir := &Dir{
+		File: &File{
+			Name:  "test_dir",
+			Size:  10,
+			Usage: 18,
+			Mtime: time.Date(2021, 8, 19, 0, 40, 0, 0, time.UTC).Unix(),
+		},
+		ItemCount: 2,
+		BasePath:  ".",
+	}
+
+	subdir := &Dir{
+		File: &File{
+			Name:   "nested",
+			Size:   9,
+			Usage:  14,
+			Parent: dir,
+		},
+		ItemCount: 2,
+	}
+	// File with no mtime should not emit the mtime key
+	fileNoMtime := &File{Name: "nomtime", Size: 1, Usage: 1, Parent: subdir}
+	subdir.Files = fs.Files{fileNoMtime}
+	dir.Files = fs.Files{subdir}
+
+	var buff bytes.Buffer
+	err := fileNoMtime.EncodeJSON(&buff, false)
+
+	assert.Nil(t, err)
+	assert.NotContains(t, buff.String(), `"mtime"`)
+}

@@ -659,7 +659,7 @@ func (i *SqliteItem) encodeDirJSON(writer io.Writer, topLevel bool) error {
 		buff = append(buff, []byte(`,"dsize":`)...)
 		buff = append(buff, []byte(strconv.FormatInt(i.GetUsage(), 10))...)
 	}
-	if !i.GetMtime().IsZero() {
+	if i.GetMtime().Unix() != 0 {
 		buff = append(buff, []byte(`,"mtime":`)...)
 		buff = append(buff, []byte(strconv.FormatInt(i.GetMtime().Unix(), 10))...)
 	}
@@ -712,7 +712,7 @@ func (i *SqliteItem) encodeFileJSON(writer io.Writer) error {
 		buff = append(buff, []byte(`,"dsize":`)...)
 		buff = append(buff, []byte(strconv.FormatInt(i.GetUsage(), 10))...)
 	}
-	if !i.GetMtime().IsZero() {
+	if i.GetMtime().Unix() != 0 {
 		buff = append(buff, []byte(`,"mtime":`)...)
 		buff = append(buff, []byte(strconv.FormatInt(i.GetMtime().Unix(), 10))...)
 	}

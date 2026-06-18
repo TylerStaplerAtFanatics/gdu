@@ -74,9 +74,9 @@ func BenchmarkHeapFootprint_NewAlloc(b *testing.B) {
 	b.ReportMetric(float64(liveBytes)/n, "heap-B/file")
 	b.ReportMetric(float64(unsafe.Sizeof(File{})), "struct-B/op")
 	runtime.KeepAlive(files)
+	b.ReportAllocs()
 	b.StartTimer()
 
-	b.ReportAllocs()
 	files2 := make([]*File, n)
 	for i := 0; i < b.N; i++ {
 		for j := range files2 {
