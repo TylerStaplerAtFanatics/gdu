@@ -104,6 +104,7 @@ type Flags struct {
 	ArchiveBrowsing    bool     `yaml:"archive-browsing"`
 	CollapsePath       bool     `yaml:"collapse-path"`
 	BrowseParentDirs   bool     `yaml:"browse-parent-dirs"`
+	MaxMemoryGiB       float64  `yaml:"max-memory"`
 }
 
 // ShouldRunInNonInteractiveMode checks if the application should run in non-interactive mode
@@ -250,6 +251,13 @@ func (a *App) Run() error {
 			}
 			ui.SetAnalyzer(sqliteAnalyzer)
 		}
+	} else if a.Flags.MaxMemoryGiB > 0 {
+		if a.Flags.SequentialScanning {
+			return fmt.Errorf("--max-memory and --sequential-scanning are mutually exclusive")
+		}
+		thresholdBytes := uint64(a.Flags.MaxMemoryGiB * 1024 * 1024 * 1024)
+		thresholdAnalyzer := analyze.CreateThresholdAnalyzer(thresholdBytes, "")
+		ui.SetAnalyzer(thresholdAnalyzer)
 	}
 	if a.Flags.SequentialScanning {
 		ui.SetAnalyzer(analyze.CreateSeqAnalyzer())

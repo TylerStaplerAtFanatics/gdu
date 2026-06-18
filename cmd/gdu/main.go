@@ -110,6 +110,7 @@ func init() {
 	flags.StringVar(&af.Until, "until", "", "Include files with mtime <= WHEN. WHEN accepts RFC3339 timestamp or date only YYYY-MM-DD")
 	flags.StringVar(&af.MaxAge, "max-age", "", "Include files with mtime no older than DURATION (e.g., 7d, 2h30m, 1y2mo)")
 	flags.StringVar(&af.MinAge, "min-age", "", "Include files with mtime at least DURATION old (e.g., 30d, 1w)")
+	flags.Float64Var(&af.MaxMemoryGiB, "max-memory", 0, "Automatically switch to SQLite disk-backed mode when heap usage exceeds this value in GiB (0 = disabled)")
 
 	initConfig()
 	setDefaults()

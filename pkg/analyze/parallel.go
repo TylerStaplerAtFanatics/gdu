@@ -1,9 +1,12 @@
 package analyze
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/metrics"
+	"time"
 
 	"github.com/dundee/gdu/v5/internal/common"
 	"github.com/dundee/gdu/v5/pkg/fs"
@@ -30,11 +33,25 @@ func CreateAnalyzer() *ParallelAnalyzer {
 func (a *ParallelAnalyzer) AnalyzeDir(
 	path string, ignore common.ShouldDirBeIgnored, fileTypeFilter common.ShouldFileBeIgnored,
 ) fs.Item {
+	ctx := context.Background()
+	item, _ := a.AnalyzeDirWithContext(ctx, path, ignore, fileTypeFilter)
+	return item
+}
+
+// AnalyzeDirWithContext analyzes the given path and respects context cancellation.
+// It returns the result and any context error (nil if completed normally).
+func (a *ParallelAnalyzer) AnalyzeDirWithContext(
+	ctx context.Context, path string, ignore common.ShouldDirBeIgnored, fileTypeFilter common.ShouldFileBeIgnored,
+) (fs.Item, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	a.cancelFn = cancel
+	defer cancel()
+
 	a.ignoreDir = ignore
 	a.ignoreFileType = fileTypeFilter
 
 	go a.UpdateProgress()
-	dir := a.processDir(path)
+	dir := a.processDir(ctx, path)
 
 	dir.BasePath = filepath.Dir(path)
 	a.wait.Wait()
@@ -42,10 +59,17 @@ func (a *ParallelAnalyzer) AnalyzeDir(
 	a.progressDoneChan <- struct{}{}
 	a.doneChan.Broadcast()
 
-	return dir
+	return dir, ctx.Err()
 }
 
-func (a *ParallelAnalyzer) processDir(path string) *Dir {
+func (a *ParallelAnalyzer) processDir(ctx context.Context, path string) *Dir {
+	// If context is already cancelled, return a minimal dir immediately.
+	if ctx.Err() != nil {
+		a.wait.Add(1)
+		a.wait.Done()
+		return &Dir{File: &File{Name: filepath.Base(path)}}
+	}
+
 	var (
 		file       fs.Item
 		err        error
@@ -73,17 +97,24 @@ func (a *ParallelAnalyzer) processDir(path string) *Dir {
 	setDirPlatformSpecificAttrs(dir, path)
 
 	for _, f := range files {
+		if ctx.Err() != nil {
+			break
+		}
 		name := f.Name()
 		entryPath := filepath.Join(path, name)
 		if f.IsDir() {
 			if a.ignoreDir(name, entryPath) {
 				continue
 			}
+			// If context is cancelled, skip launching new subdir goroutines.
+			if ctx.Err() != nil {
+				continue
+			}
 			dirCount++
 
 			go func(entryPath string) {
 				concurrencyLimit <- struct{}{}
-				subdir := a.processDir(entryPath)
+				subdir := a.processDir(ctx, entryPath)
 				subdir.Parent = dir
 
 				subDirChan <- subdir
@@ -206,4 +237,32 @@ func getFlag(f os.FileInfo) byte {
 		return '@'
 	}
 	return ' '
+}
+
+// monitorMemory polls heap usage every 500ms using runtime/metrics (no STW).
+// When heapInuse exceeds thresholdBytes, it calls cancel() and returns.
+// The goroutine also exits when ctx is done.
+func monitorMemory(ctx context.Context, thresholdBytes uint64, cancel context.CancelFunc) {
+	sample := []metrics.Sample{{Name: "/memory/classes/heap/inuse:bytes"}}
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			metrics.Read(sample)
+			if sample[0].Value.Kind() == metrics.KindUint64 {
+				heapInuse := sample[0].Value.Uint64()
+				if heapInuse > thresholdBytes {
+					log.Warnf(
+						"memory threshold reached (%.2f GiB heap in-use), spilling to disk",
+						float64(heapInuse)/(1024*1024*1024),
+					)
+					cancel()
+					return
+				}
+			}
+		}
+	}
 }
