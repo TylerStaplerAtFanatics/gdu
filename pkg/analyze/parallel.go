@@ -97,6 +97,9 @@ func (a *ParallelAnalyzer) processDir(ctx context.Context, path string) *Dir {
 	setDirPlatformSpecificAttrs(dir, path)
 
 	for _, f := range files {
+		if ctx.Err() != nil {
+			break
+		}
 		name := f.Name()
 		entryPath := filepath.Join(path, name)
 		if f.IsDir() {
