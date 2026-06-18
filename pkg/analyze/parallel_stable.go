@@ -12,12 +12,14 @@ import (
 // ParallelStableOrderAnalyzer implements Analyzer
 type ParallelStableOrderAnalyzer struct {
 	BaseAnalyzer
+	slab *FileSlab
 }
 
 // CreateStableOrderAnalyzer returns parallel Analyzer which keeps stable order of files
 func CreateStableOrderAnalyzer() *ParallelStableOrderAnalyzer {
 	a := &ParallelStableOrderAnalyzer{}
 	a.Init()
+	a.slab = &FileSlab{}
 	return a
 }
 
@@ -33,6 +35,10 @@ func (a *ParallelStableOrderAnalyzer) AnalyzeDir(
 
 	dir.BasePath = filepath.Dir(path)
 	a.wait.Wait()
+	// Free slab backing arrays after all goroutines have exited.
+	// Must be called after wait.Wait() — goroutines may still be calling
+	// slab.Alloc() until the wait group reaches zero.
+	a.slab.Free()
 
 	a.progressDoneChan <- struct{}{}
 	a.doneChan.Broadcast()
@@ -125,12 +131,13 @@ func (a *ParallelStableOrderAnalyzer) processDir(path string) *Dir {
 				continue // Skip this file
 			}
 
-			file = &File{
-				Name:   name,
-				Flag:   getFlag(info),
-				Size:   info.Size(),
-				Parent: dir,
-			}
+			// Allocate leaf File from slab to reduce GC roots O(N)→O(N/4096).
+			// Dir's embedded &File{} (in &Dir{File: &File{...}} above) is NOT slab-allocated.
+			file = a.slab.Alloc()
+			file.Name = name
+			file.Flag = getFlag(info)
+			file.Size = info.Size()
+			file.Parent = dir
 			setPlatformSpecificAttrs(file, info)
 
 			totalSize += file.Usage
