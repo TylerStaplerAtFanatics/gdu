@@ -7,11 +7,9 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -254,27 +252,12 @@ func (a *App) Run() error {
 			ui.SetAnalyzer(sqliteAnalyzer)
 		}
 	} else if a.Flags.MaxMemoryGiB > 0 {
-		tempFile, err := os.CreateTemp(os.TempDir(), "gdu-*.db")
-		if err != nil {
-			return fmt.Errorf("creating temp file for auto-spill: %w", err)
+		if a.Flags.SequentialScanning {
+			return fmt.Errorf("--max-memory and --sequential-scanning are mutually exclusive")
 		}
-		tempPath := tempFile.Name()
-		tempFile.Close()
-		os.Remove(tempPath) // remove placeholder so SqliteAnalyzer creates it fresh
-
 		thresholdBytes := uint64(a.Flags.MaxMemoryGiB * 1024 * 1024 * 1024)
-		thresholdAnalyzer := analyze.CreateThresholdAnalyzer(thresholdBytes, tempPath)
+		thresholdAnalyzer := analyze.CreateThresholdAnalyzer(thresholdBytes, "")
 		ui.SetAnalyzer(thresholdAnalyzer)
-
-		// Best-effort cleanup on interrupt signals.
-		sigs := make(chan os.Signal, 1)
-		signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-		go func() {
-			<-sigs
-			signal.Stop(sigs)
-			os.Remove(tempPath) //nolint:errcheck
-			os.Exit(1)
-		}()
 	}
 	if a.Flags.SequentialScanning {
 		ui.SetAnalyzer(analyze.CreateSeqAnalyzer())

@@ -32,8 +32,8 @@ func CreateThresholdAnalyzer(thresholdBytes uint64, tempDBPath string) *Threshol
 // AnalyzeDir implements common.Analyzer. It runs an in-memory parallel scan
 // while monitoring heap usage. If the threshold is exceeded the in-memory scan
 // is cancelled and the directory is re-scanned using SqliteAnalyzer writing to
-// a.tempDBPath. The temp file is removed when the scan completes (whether or
-// not a spill occurred).
+// a temporary SQLite file. The temp file lifecycle is fully managed here: it is
+// created on first spill and removed via defer (covering both normal exit and panic).
 func (a *ThresholdAnalyzer) AnalyzeDir(
 	path string,
 	ignore common.ShouldDirBeIgnored,
@@ -50,15 +50,35 @@ func (a *ThresholdAnalyzer) AnalyzeDir(
 	cancel() // stop monitor goroutine if scan finished before threshold
 
 	if ctxErr == nil {
-		// Completed in-memory without triggering the threshold.
-		// Remove the unused temp file if it exists.
-		os.Remove(a.tempDBPath) //nolint:errcheck // best-effort cleanup
+		// Completed in-memory without triggering the threshold — no temp file was created.
 		return item
 	}
 
 	// Threshold was exceeded: the in-memory scan was cancelled.
+	// Create the temp SQLite file now (lifecycle is fully owned here).
+	if a.tempDBPath == "" {
+		f, err := os.CreateTemp("", "gdu-spill-*.db")
+		if err != nil {
+			log.Errorf("failed to create temp file for spill: %v — returning partial in-memory result", err)
+			return item
+		}
+		a.tempDBPath = f.Name()
+		f.Close()
+		// Remove the placeholder so SqliteAnalyzer creates the schema fresh.
+		os.Remove(a.tempDBPath) //nolint:errcheck
+	}
+	// Ensure the temp file is removed when AnalyzeDir returns (covers panic too).
+	defer func() {
+		os.Remove(a.tempDBPath) //nolint:errcheck
+		a.tempDBPath = ""
+	}()
+
 	// doneChan was already broadcast inside AnalyzeDirWithContext, so any TUI
 	// progress goroutine waiting on it has already been released.
+	// Stop the old progress ticker before re-initialising to avoid a goroutine leak.
+	if a.ParallelAnalyzer.BaseAnalyzer.progressTicker != nil {
+		a.ParallelAnalyzer.BaseAnalyzer.progressTicker.Stop()
+	}
 	// Re-initialise so that the SQLite scan gets fresh channels.
 	a.ParallelAnalyzer.Init()
 
@@ -69,7 +89,6 @@ func (a *ThresholdAnalyzer) AnalyzeDir(
 		// SQLite unavailable (stub build or creation error): return the partial
 		// in-memory result rather than panicking.
 		log.Errorf("failed to create SQLite analyzer for spill: %v — returning partial in-memory result", err)
-		os.Remove(a.tempDBPath) //nolint:errcheck
 		return item
 	}
 
@@ -83,8 +102,6 @@ func (a *ThresholdAnalyzer) AnalyzeDir(
 	if a.ignoreFileType != nil {
 		sqliteAnalyzer.SetFileTypeFilter(a.ignoreFileType)
 	}
-
-	defer os.Remove(a.tempDBPath) //nolint:errcheck
 
 	return sqliteAnalyzer.AnalyzeDir(path, ignore, fileTypeFilter)
 }
