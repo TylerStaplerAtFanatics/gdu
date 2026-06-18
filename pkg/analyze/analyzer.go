@@ -1,6 +1,7 @@
 package analyze
 
 import (
+	"context"
 	"sync/atomic"
 	"time"
 
@@ -18,6 +19,7 @@ type BaseAnalyzer struct {
 	wait                    *WaitGroup
 	ignoreDir               common.ShouldDirBeIgnored
 	ignoreFileType          common.ShouldFileBeIgnored
+	cancelFn                context.CancelFunc
 	followSymlinks          bool
 	gitAnnexedSize          bool
 	matchesTimeFilterFn     common.TimeFilter
