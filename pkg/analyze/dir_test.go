@@ -1,6 +1,7 @@
 package analyze
 
 import (
+	"fmt"
 	"os"
 	"sort"
 	"testing"
@@ -351,4 +352,41 @@ func getFileNames(item fs.Item) []string {
 		}
 	}
 	return names
+}
+
+// BenchmarkAnalyzeDirSlab benchmarks the slab-backed ParallelAnalyzer over a
+// tree of ~1000 files spread across 10 subdirectories.
+// Compare allocs/op to BenchmarkAnalyzeDir to see the slab benefit.
+func BenchmarkAnalyzeDirSlab(b *testing.B) {
+	// Create temp dir with 10 subdirs × 100 files = 1000 leaf files
+	root, err := os.MkdirTemp("", "gdu-bench-slab-*")
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer os.RemoveAll(root)
+
+	for d := 0; d < 10; d++ {
+		subdir := fmt.Sprintf("%s/sub%02d", root, d)
+		if err := os.Mkdir(subdir, 0o755); err != nil {
+			b.Fatal(err)
+		}
+		for f := 0; f < 100; f++ {
+			name := fmt.Sprintf("%s/file%04d.txt", subdir, f)
+			if err := os.WriteFile(name, []byte("data"), 0o644); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		analyzer := CreateAnalyzer()
+		dir := analyzer.AnalyzeDir(
+			root,
+			func(_, _ string) bool { return false },
+			func(_ string) bool { return false },
+		)
+		analyzer.GetDone().Wait()
+		dir.UpdateStats(make(fs.HardLinkedItems))
+	}
 }
