@@ -152,7 +152,7 @@ func createDirWithExtensions() *analyze.Dir {
 			Name:  "test_dir",
 			Usage: 1e9,
 			Size:  1e9,
-			Mtime: time.Date(2021, 8, 27, 22, 23, 24, 0, time.UTC),
+			Mtime: time.Date(2021, 8, 27, 22, 23, 24, 0, time.UTC).Unix(),
 		},
 		BasePath:  ".",
 		ItemCount: 6,
@@ -162,7 +162,7 @@ func createDirWithExtensions() *analyze.Dir {
 			Name:   "subdir",
 			Usage:  1e6,
 			Size:   1e6,
-			Mtime:  time.Date(2021, 8, 27, 22, 23, 24, 0, time.UTC),
+			Mtime:  time.Date(2021, 8, 27, 22, 23, 24, 0, time.UTC).Unix(),
 			Parent: dir,
 		},
 	}
@@ -170,28 +170,28 @@ func createDirWithExtensions() *analyze.Dir {
 		Name:   "main.go",
 		Usage:  1e6,
 		Size:   1e6,
-		Mtime:  time.Date(2021, 8, 27, 22, 23, 24, 0, time.UTC),
+		Mtime:  time.Date(2021, 8, 27, 22, 23, 24, 0, time.UTC).Unix(),
 		Parent: dir,
 	}
 	yamlFile := &analyze.File{
 		Name:   "config.yaml",
 		Usage:  1e3,
 		Size:   1e3,
-		Mtime:  time.Date(2021, 8, 27, 22, 23, 24, 0, time.UTC),
+		Mtime:  time.Date(2021, 8, 27, 22, 23, 24, 0, time.UTC).Unix(),
 		Parent: dir,
 	}
 	jsonFile := &analyze.File{
 		Name:   "data.json",
 		Usage:  1e4,
 		Size:   1e4,
-		Mtime:  time.Date(2021, 8, 27, 22, 23, 24, 0, time.UTC),
+		Mtime:  time.Date(2021, 8, 27, 22, 23, 24, 0, time.UTC).Unix(),
 		Parent: dir,
 	}
 	noExtFile := &analyze.File{
 		Name:   "Makefile",
 		Usage:  500,
 		Size:   500,
-		Mtime:  time.Date(2021, 8, 27, 22, 23, 24, 0, time.UTC),
+		Mtime:  time.Date(2021, 8, 27, 22, 23, 24, 0, time.UTC).Unix(),
 		Parent: dir,
 	}
 	dir.Files = fs.Files{subdir, goFile, yamlFile, jsonFile, noExtFile}

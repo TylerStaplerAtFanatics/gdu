@@ -24,8 +24,8 @@ func TestAnalyzeDir(t *testing.T) {
 	assert.Equal(t, int64(1e12+2), result.GetSize())
 	assert.Equal(t, int64(12), result.GetItemCount())
 	assert.Equal(t,
-		time.Date(2021, 8, 27, 22, 23, 24, 0, time.UTC),
-		result.GetMtime(),
+		time.Date(2021, 8, 27, 22, 23, 24, 0, time.UTC).Unix(),
+		result.GetMtime().Unix(),
 	)
 
 	dir := result.(*analyze.Dir)
@@ -46,8 +46,8 @@ func TestAnalyzeDir(t *testing.T) {
 	assert.Equal(t, int64(1e12+2), aaa.GetSize())
 	assert.Equal(t, result, aaa.GetParent())
 	assert.Equal(t,
-		time.Date(2021, 8, 27, 22, 23, 27, 0, time.UTC),
-		aaa.GetMtime(),
+		time.Date(2021, 8, 27, 22, 23, 27, 0, time.UTC).Unix(),
+		aaa.GetMtime().Unix(),
 	)
 
 	// Verify "bbb" is a dir with GB-range size

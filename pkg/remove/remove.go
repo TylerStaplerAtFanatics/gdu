@@ -29,7 +29,7 @@ func EmptyFileFromDir(dir, file fs.Item) error {
 	dir.RemoveFile(file)
 	newFile := &analyze.File{
 		Name:   file.GetName(),
-		Flag:   file.GetFlag(),
+		Flag:   byte(file.GetFlag()),
 		Size:   0,
 		Usage:  0,
 		Parent: dir,

@@ -114,7 +114,7 @@ func TestProcessZipFileWithEmptyZip(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, zipDir)
 	assert.Equal(t, "empty.zip", zipDir.Name)
-	assert.Equal(t, 'Z', zipDir.Flag)
+	assert.Equal(t, byte('Z'), zipDir.Flag)
 }
 
 func TestProcessZipFileWithDirectoryEntries(t *testing.T) {
