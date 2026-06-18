@@ -72,7 +72,8 @@ func init() {
 		"Use apparent size of git-annex'ed files in case files are not present locally (real usage is zero)",
 	)
 	flags.BoolVarP(&af.NoCross, "no-cross", "x", false, "Do not cross filesystem boundaries")
-	flags.BoolVar(&af.Profiling, "enable-profiling", false, "Enable collection of profiling data and provide it on http://localhost:6060/debug/pprof/")
+	flags.BoolVar(&af.Profiling, "enable-profiling", false, "Enable collection of profiling data and provide it on http://localhost:<profiling-port>/debug/pprof/")
+	flags.IntVar(&af.ProfilingPort, "profiling-port", 6060, "Port for the profiling HTTP server (used with --enable-profiling)")
 
 	flags.StringVarP(&af.DbPath, "db", "D", "", "Store analysis in database (*.sqlite for SQLite, *.badger for BadgerDB)")
 	flags.BoolVarP(&af.ReadFromStorage, "read-from-storage", "r", false, "Use existing database instead of re-scanning")
