@@ -20,12 +20,14 @@ var _ common.Analyzer = (*ParallelAnalyzer)(nil)
 // ParallelAnalyzer implements Analyzer
 type ParallelAnalyzer struct {
 	BaseAnalyzer
+	slab *FileSlab
 }
 
 // CreateAnalyzer returns Analyzer
 func CreateAnalyzer() *ParallelAnalyzer {
 	a := &ParallelAnalyzer{}
 	a.Init()
+	a.slab = &FileSlab{}
 	return a
 }
 
@@ -55,6 +57,10 @@ func (a *ParallelAnalyzer) AnalyzeDirWithContext(
 
 	dir.BasePath = filepath.Dir(path)
 	a.wait.Wait()
+	// Free slab backing arrays after all goroutines have exited.
+	// Must be called after wait.Wait() — goroutines may still be calling
+	// slab.Alloc() until the wait group reaches zero.
+	a.slab.Free()
 
 	a.progressDoneChan <- struct{}{}
 	a.doneChan.Broadcast()
@@ -152,12 +158,12 @@ func (a *ParallelAnalyzer) processDir(ctx context.Context, path string) *Dir {
 				zipDir, err := processZipFile(entryPath, info)
 				if err != nil {
 					log.Printf("Failed to process zip file %s: %v", entryPath, err)
-					file = &File{
-						Name:   name,
-						Flag:   getFlag(info),
-						Size:   info.Size(),
-						Parent: dir,
-					}
+					f := a.slab.Alloc()
+					f.Name = name
+					f.Flag = getFlag(info)
+					f.Size = info.Size()
+					f.Parent = dir
+					file = f
 				} else {
 					uncompressedSize, compressedSize, err := getZipFileSize(entryPath)
 					if err == nil {
@@ -171,23 +177,26 @@ func (a *ParallelAnalyzer) processDir(ctx context.Context, path string) *Dir {
 				tarDir, err := processTarFile(entryPath, info)
 				if err != nil {
 					log.Printf("Failed to process tar file %s: %v", entryPath, err)
-					file = &File{
-						Name:   name,
-						Flag:   getFlag(info),
-						Size:   info.Size(),
-						Parent: dir,
-					}
+					f := a.slab.Alloc()
+					f.Name = name
+					f.Flag = getFlag(info)
+					f.Size = info.Size()
+					f.Parent = dir
+					file = f
 				} else {
 					tarDir.Parent = dir
 					file = tarDir
 				}
 			default:
-				file = &File{
-					Name:   name,
-					Flag:   getFlag(info),
-					Size:   info.Size(),
-					Parent: dir,
-				}
+				// Dir's embedded &File{} (the &Dir{File: &File{...}} above) is NOT slab-allocated —
+				// Dir objects are long-lived structural nodes, not leaf files. Only leaf File
+				// objects use the slab to reduce GC roots from O(N) to O(N/4096).
+				f := a.slab.Alloc()
+				f.Name = name
+				f.Flag = getFlag(info)
+				f.Size = info.Size()
+				f.Parent = dir
+				file = f
 			}
 
 			if file != nil {
