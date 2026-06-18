@@ -20,7 +20,7 @@ func TestEncode(t *testing.T) {
 			Name:  "test_dir",
 			Size:  10,
 			Usage: 18,
-			Mtime: time.Date(2021, 8, 19, 0, 40, 0, 0, time.UTC),
+			Mtime: time.Date(2021, 8, 19, 0, 40, 0, 0, time.UTC).Unix(),
 		},
 		ItemCount: 4,
 		BasePath:  ".",
@@ -47,7 +47,7 @@ func TestEncode(t *testing.T) {
 		Usage:  6,
 		Parent: subdir,
 		Flag:   '@',
-		Mtime:  time.Date(2021, 8, 19, 0, 40, 0, 0, time.UTC),
+		Mtime:  time.Date(2021, 8, 19, 0, 40, 0, 0, time.UTC).Unix(),
 	}
 	file3 := &File{
 		Name: "file3",

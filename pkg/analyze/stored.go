@@ -352,8 +352,8 @@ func (f *StoredDir) updateStats(linkedItems fs.HardLinkedItems, filteringFiles b
 		totalUsage += usage
 		itemCount += count
 
-		if entry.GetMtime().After(f.Mtime) {
-			f.Mtime = entry.GetMtime()
+		if entry.GetMtime().Unix() > f.Mtime {
+			f.Mtime = entry.GetMtime().Unix()
 		}
 
 		switch entry.GetFlag() {

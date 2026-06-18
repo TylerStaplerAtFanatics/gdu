@@ -241,7 +241,7 @@ func (s *SqliteStorage) GetRootItem() (*SqliteItem, error) {
 	item.isDir = isDirInt == 1
 	item.mtime = time.Unix(mtimeUnix, 0)
 	if flag != "" {
-		item.flag = rune(flag[0])
+		item.flag = flag[0]
 	} else {
 		item.flag = ' '
 	}
@@ -384,7 +384,7 @@ func (s *SqliteStorage) GetChildByName(parentID int64, name string) (*SqliteItem
 	item.isDir = isDirInt == 1
 	item.mtime = time.Unix(mtimeUnix, 0)
 	if flag != "" {
-		item.flag = rune(flag[0])
+		item.flag = flag[0]
 	} else {
 		item.flag = ' '
 	}
@@ -430,7 +430,7 @@ func (s *SqliteStorage) GetChildren(parentID int64) ([]*SqliteItem, error) {
 		item.isDir = isDirInt == 1
 		item.mtime = time.Unix(mtimeUnix, 0)
 		if flag != "" {
-			item.flag = rune(flag[0])
+			item.flag = flag[0]
 		} else {
 			item.flag = ' '
 		}
@@ -470,7 +470,7 @@ func (s *SqliteStorage) GetItemByID(id int64) (*SqliteItem, error) {
 	item.isDir = isDirInt == 1
 	item.mtime = time.Unix(mtimeUnix, 0)
 	if flag != "" {
-		item.flag = rune(flag[0])
+		item.flag = flag[0]
 	} else {
 		item.flag = ' '
 	}
@@ -512,7 +512,7 @@ type SqliteItem struct {
 	mtime     time.Time
 	itemCount int64
 	mli       uint64
-	flag      rune
+	flag      byte
 	parent    fs.Item
 	m         sync.RWMutex
 }
@@ -538,7 +538,7 @@ func (i *SqliteItem) GetName() string {
 
 // GetFlag returns the flag of the item
 func (i *SqliteItem) GetFlag() rune {
-	return i.flag
+	return rune(i.flag)
 }
 
 // IsDir returns true if the item is a directory
@@ -945,7 +945,7 @@ type fileStat struct {
 	usage     int64
 	itemCount int64
 	mli       uint64
-	flag      rune
+	flag      byte
 	// archiveDir is non-nil when the file is an archive that was expanded.
 	archiveDir *Dir
 }
@@ -1087,7 +1087,7 @@ func (a *SqliteAnalyzer) processDir(path string, parentID *int64) *SqliteItem {
 		dirMtime,
 		1, // item_count will be updated later
 		0,
-		dirFlag,
+		rune(dirFlag),
 	)
 	if err != nil {
 		log.Print(err.Error())
@@ -1134,7 +1134,7 @@ func (a *SqliteAnalyzer) processDir(path string, parentID *int64) *SqliteItem {
 				info.ModTime(),
 				stat.archiveDir.ItemCount,
 				0,
-				stat.archiveDir.Flag,
+				rune(stat.archiveDir.Flag),
 			)
 			if err != nil {
 				log.Print(err.Error())
@@ -1158,7 +1158,7 @@ func (a *SqliteAnalyzer) processDir(path string, parentID *int64) *SqliteItem {
 			info.ModTime(),
 			1,
 			stat.mli,
-			stat.flag,
+			rune(stat.flag),
 		)
 		if err != nil {
 			log.Print(err.Error())

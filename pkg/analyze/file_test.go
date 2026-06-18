@@ -4,6 +4,7 @@ import (
 	"slices"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/dundee/gdu/v5/pkg/fs"
 	"github.com/stretchr/testify/assert"
@@ -206,7 +207,7 @@ func TestUpdateStats(t *testing.T) {
 		File: &File{
 			Name:  "xxx",
 			Size:  1,
-			Mtime: time.Date(2021, 8, 19, 0, 40, 0, 0, time.UTC),
+			Mtime: time.Date(2021, 8, 19, 0, 40, 0, 0, time.UTC).Unix(),
 		},
 		ItemCount: 1,
 	}
@@ -214,13 +215,13 @@ func TestUpdateStats(t *testing.T) {
 	file := &File{
 		Name:   "yyy",
 		Size:   2,
-		Mtime:  time.Date(2021, 8, 19, 0, 41, 0, 0, time.UTC),
+		Mtime:  time.Date(2021, 8, 19, 0, 41, 0, 0, time.UTC).Unix(),
 		Parent: &dir,
 	}
 	file2 := &File{
 		Name:   "zzz",
 		Size:   3,
-		Mtime:  time.Date(2021, 8, 19, 0, 42, 0, 0, time.UTC),
+		Mtime:  time.Date(2021, 8, 19, 0, 42, 0, 0, time.UTC).Unix(),
 		Parent: &dir,
 	}
 	dir.Files = fs.Files{file, file2}
@@ -236,7 +237,7 @@ func TestUpdateStatsWithFileFiltering(t *testing.T) {
 		File: &File{
 			Name:  "xxx",
 			Size:  1,
-			Mtime: time.Date(2021, 8, 19, 0, 40, 0, 0, time.UTC),
+			Mtime: time.Date(2021, 8, 19, 0, 40, 0, 0, time.UTC).Unix(),
 		},
 		ItemCount: 1,
 	}
@@ -245,21 +246,21 @@ func TestUpdateStatsWithFileFiltering(t *testing.T) {
 		Name:   "yyy.go",
 		Size:   2,
 		Usage:  2048,
-		Mtime:  time.Date(2021, 8, 19, 0, 41, 0, 0, time.UTC),
+		Mtime:  time.Date(2021, 8, 19, 0, 41, 0, 0, time.UTC).Unix(),
 		Parent: &dir,
 	}
 	file2 := &File{
 		Name:   "zzz.go",
 		Size:   3,
 		Usage:  1024,
-		Mtime:  time.Date(2021, 8, 19, 0, 42, 0, 0, time.UTC),
+		Mtime:  time.Date(2021, 8, 19, 0, 42, 0, 0, time.UTC).Unix(),
 		Parent: &dir,
 	}
 	subdir := &Dir{
 		File: &File{
 			Name:   "subdir",
 			Size:   4,
-			Mtime:  time.Date(2021, 8, 19, 0, 43, 0, 0, time.UTC),
+			Mtime:  time.Date(2021, 8, 19, 0, 43, 0, 0, time.UTC).Unix(),
 			Parent: &dir,
 		},
 		ItemCount: 1,
@@ -268,7 +269,7 @@ func TestUpdateStatsWithFileFiltering(t *testing.T) {
 		File: &File{
 			Name:   "subsubdir",
 			Size:   4,
-			Mtime:  time.Date(2021, 8, 19, 0, 43, 0, 0, time.UTC),
+			Mtime:  time.Date(2021, 8, 19, 0, 43, 0, 0, time.UTC).Unix(),
 			Parent: subdir,
 		},
 		ItemCount: 1,
@@ -282,6 +283,34 @@ func TestUpdateStatsWithFileFiltering(t *testing.T) {
 	assert.Equal(t, int64(4), dir.ItemCount)
 	assert.Equal(t, int64(1024+2048), dir.Usage)
 	assert.Equal(t, 43, dir.GetMtime().Minute())
+}
+
+func TestFileStructSize(t *testing.T) {
+	assert.LessOrEqual(t, int(unsafe.Sizeof(File{})), 72)
+}
+
+func TestGetMtimeRoundtrip(t *testing.T) {
+	someUnixSecs := int64(1629329400) // 2021-08-19 00:30:00 UTC
+	f := &File{Mtime: someUnixSecs}
+	assert.Equal(t, someUnixSecs, f.GetMtime().Unix())
+	// zero-value semantics
+	assert.Equal(t, int64(0), (&File{Mtime: 0}).GetMtime().Unix())
+}
+
+func TestFlagByteCompat(t *testing.T) {
+	// compile-time: all flag constants fit in a byte
+	var _ byte = ' '
+	var _ byte = '!'
+	var _ byte = '.'
+	var _ byte = 'e'
+	var _ byte = 'H'
+	var _ byte = '@'
+	var _ byte = 'T'
+	var _ byte = 'Z'
+
+	assert.Equal(t, rune('H'), (&File{Flag: 'H'}).GetFlag())
+	assert.Equal(t, rune('@'), (&File{Flag: '@'}).GetFlag())
+	assert.Equal(t, rune(' '), (&File{Flag: ' '}).GetFlag())
 }
 
 func TestGetMultiLinkedInode(t *testing.T) {

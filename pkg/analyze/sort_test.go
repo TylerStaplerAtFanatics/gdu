@@ -175,13 +175,13 @@ func TestNaturalSortByNameAsc(t *testing.T) {
 func TestSortByMtime(t *testing.T) {
 	files := fs.Files{
 		&File{
-			Mtime: time.Date(2021, 8, 19, 0, 40, 0, 0, time.UTC),
+			Mtime: time.Date(2021, 8, 19, 0, 40, 0, 0, time.UTC).Unix(),
 		},
 		&File{
-			Mtime: time.Date(2021, 8, 19, 0, 41, 0, 0, time.UTC),
+			Mtime: time.Date(2021, 8, 19, 0, 41, 0, 0, time.UTC).Unix(),
 		},
 		&File{
-			Mtime: time.Date(2021, 8, 19, 0, 42, 0, 0, time.UTC),
+			Mtime: time.Date(2021, 8, 19, 0, 42, 0, 0, time.UTC).Unix(),
 		},
 	}
 

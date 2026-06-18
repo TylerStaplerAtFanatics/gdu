@@ -27,17 +27,17 @@ func TestParallelAnalyzerSetShowAnnexedSize(t *testing.T) {
 
 func TestGetDirFlagWithError(t *testing.T) {
 	flag := getDirFlag(os.ErrNotExist, 5)
-	assert.Equal(t, '!', flag)
+	assert.Equal(t, byte('!'), flag)
 }
 
 func TestGetDirFlagWithEmptyDir(t *testing.T) {
 	flag := getDirFlag(nil, 0)
-	assert.Equal(t, 'e', flag)
+	assert.Equal(t, byte('e'), flag)
 }
 
 func TestGetDirFlagWithNormalDir(t *testing.T) {
 	flag := getDirFlag(nil, 5)
-	assert.Equal(t, ' ', flag)
+	assert.Equal(t, byte(' '), flag)
 }
 
 func TestGetFlagWithSymlink(t *testing.T) {
@@ -52,7 +52,7 @@ func TestGetFlagWithSymlink(t *testing.T) {
 	assert.NoError(t, err)
 
 	flag := getFlag(info)
-	assert.Equal(t, '@', flag)
+	assert.Equal(t, byte('@'), flag)
 }
 
 func TestGetFlagWithRegularFile(t *testing.T) {
@@ -63,7 +63,7 @@ func TestGetFlagWithRegularFile(t *testing.T) {
 	assert.NoError(t, err)
 
 	flag := getFlag(info)
-	assert.Equal(t, ' ', flag)
+	assert.Equal(t, byte(' '), flag)
 }
 
 func TestParallelAnalyzerUpdateProgress(t *testing.T) {

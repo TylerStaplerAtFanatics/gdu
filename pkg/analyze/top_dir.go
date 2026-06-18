@@ -17,7 +17,7 @@ type TopDir struct {
 	Size      atomic.Int64
 	Usage     atomic.Int64
 	ItemCount atomic.Int64
-	Flag      rune
+	Flag      byte
 	m         sync.Mutex
 }
 
@@ -31,7 +31,7 @@ func (d *TopDir) GetUsage() (size, usage, itemCount int64) {
 	return d.Size.Load(), d.Usage.Load(), d.ItemCount.Load()
 }
 
-func (d *TopDir) SetFlag(flag rune) {
+func (d *TopDir) SetFlag(flag byte) {
 	d.m.Lock()
 	d.Flag = flag
 	d.m.Unlock()
@@ -39,7 +39,7 @@ func (d *TopDir) SetFlag(flag rune) {
 
 type SimpleFile struct {
 	Name      string
-	Flag      rune
+	Flag      byte
 	Size      int64
 	Usage     int64
 	ItemCount int64

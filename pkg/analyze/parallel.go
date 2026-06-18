@@ -190,7 +190,7 @@ func (a *ParallelAnalyzer) processDir(path string) *Dir {
 	return dir
 }
 
-func getDirFlag(err error, items int) rune {
+func getDirFlag(err error, items int) byte {
 	switch {
 	case err != nil:
 		return '!'
@@ -201,7 +201,7 @@ func getDirFlag(err error, items int) rune {
 	}
 }
 
-func getFlag(f os.FileInfo) rune {
+func getFlag(f os.FileInfo) byte {
 	if f.Mode()&os.ModeSymlink != 0 || f.Mode()&os.ModeSocket != 0 {
 		return '@'
 	}
