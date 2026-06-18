@@ -46,25 +46,7 @@ func BenchmarkAllocNewFile(b *testing.B) {
 	}
 }
 
-// ── PR 3: FileSlab — amortised allocation cost ────────────────────────────────
-//
-// slab.Alloc() bumps a pointer into an existing []File backing array.
-// B/op = (slab-bytes / files-per-slab) = exact struct size — no size-class overhead.
-// allocs/op = 0 because no heap allocation happens per call (only at slab boundaries).
-
-func BenchmarkAllocSlab(b *testing.B) {
-	var s FileSlab
-	b.ReportAllocs()
-	b.ResetTimer()
-	b.ReportMetric(float64(unsafe.Sizeof(File{})), "struct-B/op")
-	for i := 0; i < b.N; i++ {
-		// 0 heap allocs; B/op = amortised slab cost = sizeof(File) exactly
-		// On master (88-byte File): B/op would be 88; after PR 1: B/op = 72
-		sinkFile = s.Alloc()
-	}
-}
-
-// ── PR 1 + PR 3: Live heap footprint for N File objects ───────────────────────
+// ── PR 1: Live heap footprint for N File objects ─────────────────────────────
 //
 // Measures HeapAlloc delta (live bytes, after GC) for exactly N File allocations.
 // On master   (88-byte File, 96-byte class): 10K files ≈ 960 KB live
@@ -102,38 +84,6 @@ func BenchmarkHeapFootprint_NewAlloc(b *testing.B) {
 		}
 	}
 	runtime.KeepAlive(files2)
-}
-
-func BenchmarkHeapFootprint_Slab(b *testing.B) {
-	const n = 10_000
-
-	// Measure live heap outside the timing loop.
-	b.StopTimer()
-	var s0 FileSlab
-	files := make([]*File, n)
-	runtime.GC()
-	var ms1, ms2 runtime.MemStats
-	runtime.ReadMemStats(&ms1)
-	for j := range files {
-		files[j] = s0.Alloc()
-	}
-	runtime.GC()
-	runtime.ReadMemStats(&ms2)
-	liveBytes := ms2.HeapAlloc - ms1.HeapAlloc
-	b.ReportMetric(float64(liveBytes)/n, "heap-B/file")
-	b.ReportMetric(float64(unsafe.Sizeof(File{})), "struct-B/op")
-	runtime.KeepAlive(files)
-	b.StartTimer()
-
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		var s FileSlab
-		fs2 := make([]*File, n)
-		for j := range fs2 {
-			fs2[j] = s.Alloc()
-		}
-		runtime.KeepAlive(fs2)
-	}
 }
 
 // ── Full scan: live heap footprint per file scanned ───────────────────────────
@@ -222,23 +172,3 @@ func BenchmarkScanHeap_Sequential(b *testing.B) {
 	}
 }
 
-// BenchmarkScanGCRoots documents the GC root reduction from PR 3.
-// Logged values are computed from constants, not runtime measurements.
-func BenchmarkScanGCRoots(b *testing.B) {
-	root, cleanup := makeLargeTree(b)
-	defer cleanup()
-	const nFiles = benchDirs * benchFilesPerDir
-	slabs := (nFiles + fileSlabSize - 1) / fileSlabSize
-
-	b.ReportMetric(float64(nFiles), "roots-without-slab")
-	b.ReportMetric(float64(slabs), "roots-with-slab")
-	b.ReportMetric(float64(nFiles)/float64(slabs), "root-reduction-x")
-
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		a := CreateAnalyzer()
-		dir := a.AnalyzeDir(root, func(_, _ string) bool { return false }, func(_ string) bool { return false })
-		a.GetDone().Wait()
-		dir.UpdateStats(make(fs.HardLinkedItems))
-	}
-}
