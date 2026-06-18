@@ -148,7 +148,6 @@ func BenchmarkScanHeap_Parallel(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		a := CreateAnalyzer()
 		dir := a.AnalyzeDir(root, func(_, _ string) bool { return false }, func(_ string) bool { return false })
-		a.GetDone().Wait()
 		dir.UpdateStats(make(fs.HardLinkedItems))
 	}
 }
@@ -167,7 +166,6 @@ func BenchmarkScanHeap_Sequential(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		a := CreateSeqAnalyzer()
 		dir := a.AnalyzeDir(root, func(_, _ string) bool { return false }, func(_ string) bool { return false })
-		a.GetDone().Wait()
 		dir.UpdateStats(make(fs.HardLinkedItems))
 	}
 }
